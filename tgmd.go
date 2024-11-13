@@ -60,9 +60,12 @@ func (r *Renderer) heading(w util.BufWriter, _ []byte, node ast.Node, entering b
 ) {
 	n := node.(*ast.Heading)
 	if entering {
-		if n.Level > 1 && n.Level < 4 {
+		writeNewLine(w)
+
+		if n.HasBlankPreviousLines() {
 			writeNewLine(w)
 		}
+
 		Config.headings[n.Level-1].writeStart(w)
 	} else {
 		Config.headings[n.Level-1].writeEnd(w)
@@ -70,65 +73,57 @@ func (r *Renderer) heading(w util.BufWriter, _ []byte, node ast.Node, entering b
 	return ast.WalkContinue, nil
 }
 
-func (r *Renderer) paragraph(w util.BufWriter, _ []byte, node ast.Node, entering bool) (
+func (r *Renderer) paragraph(w util.BufWriter, source []byte, node ast.Node, entering bool) (
 	ast.WalkStatus, error,
 ) {
 	n := node.(*ast.Paragraph)
+
 	if entering {
-		if n.Parent().Kind().String() != ast.KindBlockquote.String() {
+		if n.Parent().Kind() == ast.KindDocument {
 			writeNewLine(w)
+			if n.HasBlankPreviousLines() {
+				writeNewLine(w)
+			}
 		}
-	} else {
-		writeNewLine(w)
 	}
+
 	return ast.WalkContinue, nil
 }
 
 func (r *Renderer) list(w util.BufWriter, source []byte, node ast.Node, entering bool) (
 	ast.WalkStatus, error,
 ) {
-	n := node.(*ast.List)
-	if !entering {
-		parent := n.Parent()
-
-		if parent.Kind().String() == ast.KindDocument.String() {
-			parentContent := []rune(string(parent.Text(source)))
-
-			for _, bullet := range Config.listBullets {
-				if len(parentContent) == 1 && parentContent[0] == bullet {
-					return ast.WalkContinue, nil
-				}
-			}
-
-			writeNewLine(w)
-		}
-	}
-
 	return ast.WalkContinue, nil
 }
 
-func (r *Renderer) listItem(w util.BufWriter, _ []byte, node ast.Node, entering bool) (
+func (r *Renderer) listItem(w util.BufWriter, source []byte, node ast.Node, entering bool) (
 	ast.WalkStatus, error,
 ) {
 	n := node.(*ast.ListItem)
 	if entering {
 		writeNewLine(w)
+
+		if n.HasBlankPreviousLines() {
+			writeNewLine(w)
+		}
+
 		if n.Parent().Parent().Kind().String() == ast.KindDocument.String() {
-			writeRowBytes(w, []byte{SpaceChar.Byte(), SpaceChar.Byte()})
+			writeRowBytes(w, SpaceChar.Bytes(2))
 			writeRune(w, Config.listBullets[0])
 		} else {
 			if n.Parent().Parent().Parent().Parent() != nil {
 				if n.Parent().Parent().Parent().Parent().Kind().String() == ast.KindListItem.String() {
-					writeRowBytes(w, []byte{SpaceChar.Byte(), SpaceChar.Byte(), SpaceChar.Byte(), SpaceChar.Byte(), SpaceChar.Byte(), SpaceChar.Byte()})
+					writeRowBytes(w, SpaceChar.Bytes(6))
 					writeRune(w, Config.listBullets[2])
 				} else {
-					writeRowBytes(w, []byte{SpaceChar.Byte(), SpaceChar.Byte(), SpaceChar.Byte(), SpaceChar.Byte()})
+					writeRowBytes(w, SpaceChar.Bytes(4))
 					writeRune(w, Config.listBullets[1])
 				}
 			}
 		}
 		writeRowBytes(w, []byte{SpaceChar.Byte()})
 	}
+
 	return ast.WalkContinue, nil
 }
 
@@ -152,6 +147,9 @@ func (r *Renderer) code(w util.BufWriter, source []byte, node ast.Node, entering
 	nn := node.(*ast.FencedCodeBlock)
 	if entering {
 		writeNewLine(w)
+		if node.HasBlankPreviousLines() {
+			writeNewLine(w)
+		}
 		writeWrapperArr(w.Write(CodeTg.Bytes()))
 		writeWrapperArr(w.Write(nn.Language(source)))
 	} else {
